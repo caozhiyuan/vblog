@@ -40,6 +40,15 @@ spring:
         static-path-pattern: /static/**
     resources:
         add-mappings: false
+    rabbitmq:
+      host: localhost
+      port: 5672
+      username: admin
+      password: 123456
+      virtual-host: /
+      listener:
+        direct:
+          consumers-per-queue: 1
 
 #mybatis
 mybatis-plus:
