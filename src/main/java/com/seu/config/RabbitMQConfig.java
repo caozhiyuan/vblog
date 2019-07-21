@@ -23,6 +23,7 @@ import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 import java.io.IOException;
 import java.util.Date;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author ：caozhiyuan
@@ -31,23 +32,23 @@ import java.util.concurrent.*;
 @Configuration
 public class RabbitMQConfig {
 
-    static final String topicExchangeName = "spring-boot-exchange";
+    static final String topicExchangeName = "asynctest";
 
-    static final String queueName = "spring-boot";
+    static final String queueName = "asynctest";
 
     @Bean
     Queue queue() {
-        return new Queue(queueName, false);
+        return new Queue(queueName, true,false,false,null);
     }
 
     @Bean
     TopicExchange exchange() {
-        return new TopicExchange(topicExchangeName);
+        return new TopicExchange(topicExchangeName,true,false);
     }
 
     @Bean
     Binding binding(Queue queue, TopicExchange exchange) {
-        return BindingBuilder.bind(queue).to(exchange).with("foo.bar.#");
+        return BindingBuilder.bind(queue).to(exchange).with("asynctest");
     }
 
     @Bean
@@ -74,7 +75,7 @@ public class RabbitMQConfig {
 
         @Override
         public void setMessageListener(MessageListener messageListener) {
-            this.setMessageListener(new ConcurrentMessageListener(messageListener,null));
+            this.setMessageListener(new ConcurrentMessageListener(messageListener));
         }
 
         @Override
@@ -88,14 +89,48 @@ public class RabbitMQConfig {
 
         @Override
         public void setChannelAwareMessageListener(ChannelAwareMessageListener messageListener) {
-            this.setMessageListener(new ConcurrentMessageListener(null, messageListener));
+            throw new NotImplementedException();
         }
 
         @Override
         protected void doStart() throws Exception {
             super.doStart();
             int availableProcessors = Runtime.getRuntime().availableProcessors();
-            executor = Executors.newFixedThreadPool(availableProcessors);
+            executor = new ThreadPoolExecutor(availableProcessors,
+                    availableProcessors * 2,
+                    200, TimeUnit.MILLISECONDS,
+                    new LinkedBlockingQueue<>(),
+                    new DefaultThreadFactory());
+        }
+
+        class DefaultThreadFactory implements ThreadFactory {
+            private final AtomicInteger poolNumber = new AtomicInteger(1);
+            private final ThreadGroup group;
+            private final AtomicInteger threadNumber = new AtomicInteger(1);
+            private final String namePrefix;
+
+            DefaultThreadFactory() {
+                SecurityManager s = System.getSecurityManager();
+                group = (s != null) ? s.getThreadGroup() :
+                        Thread.currentThread().getThreadGroup();
+                namePrefix = "directConcurrentMessageListener-" +
+                        poolNumber.getAndIncrement() +
+                        "-thread-";
+            }
+
+            @Override
+            public Thread newThread(Runnable r) {
+                Thread t = new Thread(group, r,
+                        namePrefix + threadNumber.getAndIncrement(),
+                        0);
+                if (t.isDaemon()) {
+                    t.setDaemon(false);
+                }
+                if (t.getPriority() != Thread.NORM_PRIORITY) {
+                    t.setPriority(Thread.NORM_PRIORITY);
+                }
+                return t;
+            }
         }
 
         @Override
@@ -108,11 +143,9 @@ public class RabbitMQConfig {
         public class ConcurrentMessageListener implements ChannelAwareMessageListener {
 
             private MessageListener messageListener;
-            private ChannelAwareMessageListener channelAwareMessageListener;
 
-            ConcurrentMessageListener(MessageListener messageListener, ChannelAwareMessageListener channelAwareMessageListener) {
+            ConcurrentMessageListener(MessageListener messageListener) {
                 this.messageListener = messageListener;
-                this.channelAwareMessageListener = channelAwareMessageListener;
             }
 
             @Override
@@ -122,15 +155,7 @@ public class RabbitMQConfig {
                 }
 
                 CompletableFuture.runAsync(() -> {
-                    if(channelAwareMessageListener != null){
-                        try {
-                            channelAwareMessageListener.onMessage(message,channel);
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    }else{
-                        messageListener.onMessage(message);
-                    }
+                    messageListener.onMessage(message);
                 }, executor).whenComplete((r, e)->{
                     try {
                         channel.basicAck(message.getMessageProperties().getDeliveryTag(), false);
@@ -156,11 +181,9 @@ public class RabbitMQConfig {
         @Override
         public void onMessage(Message message) {
             try {
+                //Thread.sleep(50);
                 System.out.println("in :" + new Date());
-                //System.out.println(message);
-                Thread.sleep(1000);
-                System.out.println("out :" + new Date());
-            } catch (InterruptedException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }
