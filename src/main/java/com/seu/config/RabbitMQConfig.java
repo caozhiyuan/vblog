@@ -9,14 +9,8 @@ import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.connection.RabbitUtils;
 import org.springframework.amqp.rabbit.core.ChannelAwareMessageListener;
 import org.springframework.amqp.rabbit.listener.DirectMessageListenerContainer;
-import org.springframework.amqp.rabbit.listener.adapter.MessageListenerAdapter;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.Lifecycle;
-import org.springframework.context.SmartLifecycle;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.stereotype.Component;
 import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 
@@ -51,6 +45,18 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(queue).to(exchange).with("asynctest");
     }
 
+    /*
+    @RabbitListener(queues = "asynctest",concurrency = "4-8")
+    public void Test(Message message){
+        try {
+            Thread.sleep(50);
+            System.out.println("in :" + new Date());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    */
+
     @Bean
     MessageListener testListener(){
        return new TestListener();
@@ -60,8 +66,8 @@ public class RabbitMQConfig {
     DirectConcurrentMessageListenerContainer container(ConnectionFactory connectionFactory, MessageListener testListener) {
         DirectConcurrentMessageListenerContainer container = new DirectConcurrentMessageListenerContainer();
         container.addQueueNames(queueName);
-        container.setConsumersPerQueue(1);
-        container.setPrefetchCount(50);
+        container.setConsumersPerQueue(4);
+        container.setPrefetchCount(250);
         container.setConnectionFactory(connectionFactory);
         container.setAcknowledgeMode(AcknowledgeMode.MANUAL);
         container.setMessageListener(testListener);
