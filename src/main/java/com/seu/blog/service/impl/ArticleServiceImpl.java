@@ -92,7 +92,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleDao, ArticleEntity> i
             object.put("createTime", article.getCreateTime());
             object.put("viewNum", article.getViewNum());
             object.put("commentNum", article.getCommentNum());
-
+            object.put("test","12221");
             array.add(object);
         }
         return array;
